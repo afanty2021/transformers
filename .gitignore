@@ -175,3 +175,6 @@ tags
 
 # Cursor IDE files
 .cursor/
+
+# Spec workflow files
+.spec-workflow/
