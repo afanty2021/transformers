@@ -13,6 +13,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Transformers Logits处理器模块
+
+该模块实现了文本生成过程中Logits处理的核心功能，负责对模型输出的原始概率分布进行调整和过滤。
+Logits处理器是生成过程中的关键组件，直接影响生成文本的质量、多样性和安全性。
+
+核心功能：
+- 概率分布调整：温度、Top-K、Top-P等采样策略
+- 重复惩罚：避免生成重复内容
+- 约束生成：强制生成特定内容或模式
+- 安全过滤：防止生成不当内容
+- 序列偏置：调整特定token的生成概率
+
+主要组件：
+- LogitsProcessor：处理器基类
+- LogitsWarper：概率分布变形器
+- LogitsProcessorList：处理器管理器
+- 各种专用处理器：温度、采样、惩罚等
+
+使用场景：
+- 文本生成策略的实现
+- 生成质量优化
+- 内容安全控制
+- 特定任务的生成约束
+
+设计原则：
+- 模块化：每个处理器专注于特定功能
+- 可组合：多个处理器可以组合使用
+- 高效性：优化计算性能和内存使用
+- 灵活性：支持自定义处理逻辑
+"""
+
 import inspect
 import math
 from collections.abc import Callable, Iterable
@@ -48,10 +80,66 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 
 
 class LogitsProcessor:
-    """Abstract base class for all logit processors that can be applied during generation."""
+    """
+    Logits处理器抽象基类
+
+    这是所有Logits处理器的抽象基类，定义了处理器的标准接口。
+    具体的处理器类必须继承此类并实现__call__方法。
+
+    🎯 核心功能：
+    - 定义标准处理器接口
+    - 确保处理器的一致性
+    - 提供类型检查和错误处理
+
+    🔧 使用方法：
+        自定义处理器必须继承此类并实现__call__方法：
+
+        ```python
+        class CustomLogitsProcessor(LogitsProcessor):
+            def __call__(self, input_ids, scores):
+                # 实现自定义处理逻辑
+                modified_scores = your_processing_logic(scores)
+                return modified_scores
+        ```
+
+    📋 参数说明：
+        input_ids (torch.LongTensor): 当前已生成的token ID序列
+            - 形状: (batch_size, sequence_length)
+            - 包含到目前为止生成的所有token
+
+        scores (torch.FloatTensor): 模型输出的原始预测分数
+            - 形状: (batch_size, vocab_size)
+            - 每个词汇表中token的预测分数
+
+    📤 返回值：
+        torch.FloatTensor: 处理后的预测分数
+            - 形状必须与输入scores相同
+            - 包含调整后的token概率分布
+
+    ⚠️ 注意事项：
+        - 必须重写__call__方法
+        - 返回的张量形状不能改变
+        - 处理逻辑应该在GPU上高效执行
+        - 避免in-place操作影响原始数据
+    """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        """
+        处理Logits的核心方法
+
+        子类必须实现此方法来定义特定的处理逻辑。
+
+        Args:
+            input_ids: 已生成的token序列
+            scores: 原始预测分数
+
+        Returns:
+            处理后的预测分数
+
+        Raises:
+            NotImplementedError: 如果子类未实现此方法
+        """
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
         )
@@ -59,9 +147,38 @@ class LogitsProcessor:
 
 class LogitsProcessorList(list):
     """
-    This class can be used to create a list of [`LogitsProcessor`] to subsequently process a `scores` input tensor.
-    This class inherits from list and adds a specific *__call__* method to apply each [`LogitsProcessor`] to the
-    inputs.
+    Logits处理器列表管理器
+
+    这个类用于创建和管理LogitsProcessor列表，按顺序应用每个处理器到scores张量。
+    继承自Python的list类，并添加了特定的__call__方法来链式应用所有处理器。
+
+    🎯 核心功能：
+    - 管理多个LogitsProcessor
+    - 按顺序应用处理器
+    - 支持不同签名的处理器
+    - 提供高效的批量处理
+
+    🔧 使用示例：
+        ```python
+        # 创建处理器列表
+        processors = LogitsProcessorList([
+            TemperatureLogitsWarper(temperature=0.8),
+            TopPLogitsWarper(top_p=0.9),
+            RepetitionPenaltyLogitsProcessor(penalty=1.2)
+        ])
+
+        # 应用处理器
+        scores = processors(input_ids, raw_scores)
+        ```
+
+    🚀 性能特性：
+    - 高效的链式调用
+    - 智能参数传递
+    - 内存优化的处理流程
+
+    📋 处理顺序：
+    处理器按照列表中的顺序依次应用，每个处理器的输出作为下一个处理器的输入。
+    合理的处理器顺序对生成质量很重要。
     """
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.FloatTensor:

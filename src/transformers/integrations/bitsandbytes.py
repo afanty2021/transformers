@@ -1,3 +1,53 @@
+"""
+Transformers与BitsAndBytes量化集成模块
+
+该模块实现Transformers框架与BitsAndBytes库的深度集成，提供8位和4位模型量化功能。
+BitsAndBytes是由Tim Dettmers等人开发的量化库，专门用于深度学习模型的内存优化。
+
+核心功能：
+- 8位量化：INT8训练和推理，显著减少内存使用
+- 4位量化：NF4和FP4格式，支持超低精度推理
+- 混合精度：量化与FP16/BF16的混合使用
+- 动态量化：运行时的动态量化策略
+- 硬件加速：支持现代GPU的量化计算
+
+主要组件：
+- BitsAndBytesConfig：量化配置管理
+- quantize_blockwise：块级量化算法
+- dequantize_blockwise：块级反量化
+- Linear8bitLt/Linear4bit：量化线性层实现
+
+量化技术：
+- **8位量化**：8位整数训练和推理
+- **NF4量化**：4位正态浮点数格式
+- **FP4量化**：4位浮点数格式
+- **双重量化**：量化参数的双重压缩
+
+使用场景：
+- 大模型推理内存优化
+- 有限GPU资源下的模型部署
+- 边缘设备的模型推理
+- 云服务的成本优化
+
+性能优势：
+- 内存节省：4位量化可减少75%内存使用
+- 速度提升：在某些硬件上可加速推理
+- 兼容性：与现有模型和训练流程兼容
+- 易用性：简单的配置和API
+
+注意事项：
+- 需要BitsAndBytes库：pip install bitsandbytes
+- 建议CUDA GPU和兼容的驱动程序
+- 量化会带来一定的精度损失
+- 4位量化主要用于推理场景
+
+硬件要求：
+- NVIDIA GPU（计算能力>=6.0）
+- CUDA 11.0+（推荐11.6+）
+- 足够的GPU内存用于量化模型
+- 支持混合精度的GPU（FP16/BF16）
+"""
+
 import inspect
 from copy import deepcopy
 from inspect import signature

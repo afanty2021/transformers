@@ -13,6 +13,37 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+"""
+Transformers文本生成工具模块
+
+该模块是Transformers框架的文本生成核心，提供了完整的文本生成基础设施。
+包含了生成配置、Logits处理、停止条件、流式输出等全套生成工具。
+
+核心功能：
+- 生成混入类：为模型提供文本生成能力
+- 输出类型：标准化的生成输出格式
+- 工具函数：生成过程中的辅助工具
+- 配置管理：统一的生成参数管理
+- 性能优化：缓存、编译等优化策略
+
+主要组件：
+- GenerationMixin: 核心生成功能混入类
+- 生成输出类：标准化输出格式
+- 辅助工具：生成过程的各种工具函数
+
+使用场景：
+- 文本生成和对话系统
+- 代码生成和自动补全
+- 创意写作和内容创作
+- 机器翻译和文本摘要
+
+设计原则：
+- 模块化：各组件可独立使用和扩展
+- 灵活性：支持多种生成策略和配置
+- 性能：优化的生成流程和缓存机制
+- 兼容性：与不同模型架构的兼容
+"""
 import copy
 import functools
 import inspect
@@ -339,34 +370,91 @@ GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
 
 class GenerationMixin(ContinuousMixin):
     """
-    A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
-    Inheriting from this class causes the model to have special generation-related behavior, such as loading a
-    `GenerationConfig` at initialization time or ensuring `generate`-related tests are run in `transformers` CI.
+    文本生成混入类
 
-    A model class should inherit from `GenerationMixin` to enable calling methods like `generate`, or when it
-    has defined a custom `generate` method that relies on `GenerationMixin`, directly or indirectly, which
-    approximately shares the same interface to public methods like `generate`. Three examples:
-        - `LlamaForCausalLM` should inherit from `GenerationMixin` to enable calling `generate` and other public
-            methods in the mixin;
-        - `BlipForQuestionAnswering` has a custom `generate` method that approximately shares the same interface as
-           `GenerationMixin.generate` (it has a few extra arguments, and the same output). That function also calls
-           `GenerationMixin.generate` indirectly, through an inner model. As such, `BlipForQuestionAnswering` should
-           inherit from `GenerationMixin` to benefit from all generation-related automation in our codebase;
-        - `BarkModel` has a custom `generate` method and one of its inner models calls `GenerationMixin.generate`.
-            However, its `generate` does not share the same interface as `GenerationMixin.generate`. In this case,
-            `BarkModel` should NOT inherit from `GenerationMixin`, as it breaks the `generate` interface.
+    这是Transformers框架中所有自回归文本生成功能的核心混入类。
+    模型类通过继承此类可以获得完整的文本生成能力，包括各种解码策略和优化功能。
 
-    The class exposes [`~generation.GenerationMixin.generate`], which can be used for:
-        - *greedy decoding* if `num_beams=1` and `do_sample=False`
-        - *multinomial sampling* if `num_beams=1` and `do_sample=True`
-        - *beam-search decoding* if `num_beams>1` and `do_sample=False`
-        - *beam-search multinomial sampling* if `num_beams>1` and `do_sample=True`
-        - *assisted decoding* if `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
+    🎯 核心功能：
+    - 自动加载GenerationConfig配置
+    - 提供统一的generate()接口
+    - 支持多种解码策略
+    - 集成CI/CD测试自动化
+    - 提供生成相关的工具方法
 
-    To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
+    📋 继承指导：
+
+    模型类应该在以下情况下继承GenerationMixin：
+
+    1. **直接文本生成模型**：
+       - `LlamaForCausalLM`：继承后可直接调用generate()等方法
+       - `GPT2LMHeadModel`：获得标准文本生成能力
+
+    2. **自定义generate方法**：
+       - `BlipForQuestionAnswering`：有自定义generate方法，但接口与GenerationMixin.generate兼容
+       - 通过内部模型间接调用GenerationMixin.generate
+       - 需要保持相同或兼容的接口
+
+    3. **不应该继承的情况**：
+       - `BarkModel`：有自定义generate方法，但接口不兼容
+       - 会破坏generate接口的一致性
+
+    🎮 解码策略支持：
+
+    - **贪婪解码**：num_beams=1 且 do_sample=False
+      - 每步选择概率最高的token
+      - 结果确定，速度快
+      - 适用于确定性场景
+
+    - **多项采样**：num_beams=1 且 do_sample=True
+      - 根据概率分布采样
+      - 结果随机，有创造性
+      - 适用于创意写作
+
+    - **束搜索解码**：num_beams>1 且 do_sample=False
+      - 并行搜索多个候选序列
+      - 结果质量高，计算开销大
+      - 适用于需要最优结果的场景
+
+    - **束搜索多项采样**：num_beams>1 且 do_sample=True
+      - 结合束搜索和采样
+      - 平衡质量和多样性
+
+    - **辅助解码**：使用assistant_model或prompt_lookup_num_tokens
+      - 通过辅助模型加速生成
+      - 提高生成效率
+
+    📖 详细学习：
+    关于解码策略的更多信息，请参考[文本生成策略指南](../generation_strategies)。
+
+    ⚙️ 使用示例：
+        ```python
+        class MyTextModel(GenerationMixin, PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                # 模型初始化
+
+        model = MyTextModel.from_pretrained("model-name")
+        outputs = model.generate(
+            input_ids,
+            max_length=100,
+            num_beams=3,
+            do_sample=True,
+            temperature=0.8
+        )
+        ```
+
+    🚀 性能特性：
+    - 自动KV缓存管理
+    - 梯度检查点支持
+    - 混合精度推理
+    - 分布式生成支持
+    - 流式输出能力
     """
 
-    # Should be overwritten by models that can generate non-text output
+    # 输出模态，可被能生成非文本输出的模型重写
+    # 默认为"text"，表示文本输出
+    # 语音模型可重写为"speech"，图像模型可重写为"image"等
     output_modalities = "text"
 
     def adjust_generation_fn(

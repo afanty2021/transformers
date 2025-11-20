@@ -1643,33 +1643,105 @@ class EmbeddingAccessMixin:
 
 class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
     r"""
-    Base class for all models.
+    预训练模型基类
 
-    [`PreTrainedModel`] takes care of storing the configuration of the models and handles methods for loading,
-    downloading and saving models as well as a few methods common to all models to:
+    这是Transformers中所有模型的抽象基类，提供了模型的标准接口和通用功能。
+    继承自PyTorch的nn.Module，并混入了多个功能Mixin类，提供完整的模型生命周期管理。
 
-        - resize the input embeddings
+    核心功能：
+    - 配置管理：存储和管理模型配置
+    - 模型序列化：支持模型的保存、加载和下载
+    - 设备管理：自动处理设备分配和转换
+    - 梯度检查点：支持内存优化的梯度计算
+    - 混合精度：支持FP16、BF16等精度训练
+    - 分布式：支持多GPU和分布式训练
+    - Hub集成：与Hugging Face Hub深度集成
+    - PEFT支持：参数高效微调支持
 
-    Class attributes (overridden by derived classes):
+    主要特性：
+    - 统一的模型接口，确保所有模型的一致性
+    - 自动化的模型下载和缓存管理
+    - 灵活的设备管理（CPU/GPU/TPU）
+    - 高效的内存使用和性能优化
+    - 完整的版本兼容性支持
 
-        - **config_class** ([`PreTrainedConfig`]) -- A subclass of [`PreTrainedConfig`] to use as configuration class
-          for this model architecture.
-        - **base_model_prefix** (`str`) -- A string indicating the attribute associated to the base model in derived
-          classes of the same architecture adding modules on top of the base model.
-        - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
-          models, `pixel_values` for vision models and `input_values` for speech models).
-        - **can_record_outputs** (dict):
+    类属性（子类可重写）：
+    - **config_class** (PreTrainedConfig): 配置类，定义模型架构和超参数
+    - **base_model_prefix** (str): 基础模型前缀，用于模块化模型中的基础部分
+    - **main_input_name** (str): 主输入名称，通常为'input_ids'、'pixel_values'等
+    - **can_record_outputs** (dict): 输出记录配置，用于调试和分析
+
+    标准输入参数：
+    - input_ids: NLP模型的输入ID序列
+    - attention_mask: 注意力掩码，标识有效token
+    - token_type_ids: 段落标识，区分句子对
+    - position_ids: 位置ID，指定token位置
+    - head_mask: 注意力头掩码
+    - inputs_embeds: 预计算的嵌入输入
+    - output_attentions: 是否输出注意力权重
+    - output_hidden_states: 是否输出隐藏状态
+    - return_dict: 是否返回ModelOutput对象
+
+    使用示例：
+        ```python
+        # 从预训练权重加载模型
+        model = AutoModel.from_pretrained("bert-base-uncased")
+
+        # 模型推理
+        outputs = model(input_ids, attention_mask=attention_mask)
+        last_hidden_state = outputs.last_hidden_state
+
+        # 保存模型
+        model.save_pretrained("./my_model")
+
+        # 推理优化
+        model.eval()  # 设置为评估模式
+        model.half()  # 转换为半精度
+        ```
+
+    继承指导：
+        1. 必须定义config_class属性
+        2. 实现forward方法，接受标准输入格式
+        3. 可以重写_init_weights方法进行权重初始化
+        4. 可以重写_post_init方法进行模型初始化后处理
+        5. 考虑添加model-specific的方法
+
+    性能优化：
+        - 使用gradient_checkpointing启用梯度检查点
+        - 使用can_generate标志启用生成能力
+        - 设置_no_split_modules用于模型并行
+        - 配置_skip_keys_device_placement优化设备放置
     """
 
-    config_class = None
+    # 类属性定义 - 子类必须或可以重写
+
+    # 配置类 - 子类必须指定其对应的配置类
+    config_class = None  # type: PreTrainedConfig | None
+
+    # 基础模型前缀 - 用于模块化架构中标识基础模型部分
+    # 例如：在BertForSequenceClassification中，基础模型是"bert"
     base_model_prefix = ""
+
+    # 主要输入名称 - 用于识别模型的主要输入张量
+    # NLP模型通常是"input_ids"，视觉模型是"pixel_values"，语音模型是"input_values"
     main_input_name = "input_ids"
+
+    # 模型标签 - 用于模型识别和分类
     model_tags = None
 
-    _checkpoint_conversion_mapping = {}  # used for BC support in VLMs, not meant to be used by new models
+    # 检查点转换映射 - 用于视觉语言模型的向后兼容性支持
+    # 新模型不应使用此属性，主要用于维护旧模型的兼容性
+    _checkpoint_conversion_mapping = {}
 
+    # 自动加载类 - 用于AutoModel类的自动检测和加载
     _auto_class = None
+
+    # 不可分割模块列表 - 指定哪些模块不能被分割用于模型并行
+    # 这对于大模型的分布式部署非常重要
     _no_split_modules = None
+
+    # 跳过设备放置的键列表 - 指定哪些张量/参数不参与自动设备放置
+    # 用于优化设备分配，减少不必要的设备间数据传输
     _skip_keys_device_placement = None
 
     _keep_in_fp32_modules = None

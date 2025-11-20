@@ -12,7 +12,35 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Configuration base class and utilities."""
+"""
+Transformers配置工具模块
+
+该模块提供了Transformers框架的配置管理系统，是模型配置的基础设施。
+定义了所有模型的配置基类和相关工具函数，确保模型配置的标准化和兼容性。
+
+主要功能：
+- 提供预训练模型配置的基类 (PreTrainedConfig)
+- 支持配置的序列化和反序列化
+- 提供配置的版本管理和兼容性检查
+- 支持配置的Hub集成和共享
+- 提供配置验证和类型检查
+
+核心类：
+- PreTrainedConfig: 所有模型配置的基类
+- 提供配置的保存、加载、验证等功能
+
+使用场景：
+- 模型架构定义和超参数配置
+- 模型版本管理和兼容性维护
+- 模型配置的共享和重用
+- 自定义模型架构的配置
+
+设计原则：
+- 配置与模型分离，便于管理
+- 支持配置的向前兼容性
+- 提供灵活的配置扩展机制
+- 确保配置的一致性和可验证性
+"""
 
 import copy
 import json
@@ -53,34 +81,72 @@ SpecificPreTrainedConfigType = TypeVar("SpecificPreTrainedConfigType", bound="Pr
 class PreTrainedConfig(PushToHubMixin):
     # no-format
     r"""
-    Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
-    methods for loading/downloading/saving configurations.
+    预训练模型配置基类
 
-    <Tip>
+    这是所有Transformers模型配置的基类，提供了统一的配置接口和管理功能。
+    负责处理模型配置的序列化、反序列化、版本控制和Hub集成等功能。
 
-    A configuration file can be loaded and saved to disk. Loading the configuration file and using this file to
-    initialize a model does **not** load the model weights. It only affects the model's configuration.
+    🔧 核心功能：
+    - 配置管理：定义模型架构和超参数
+    - 序列化：支持JSON格式的保存和加载
+    - Hub集成：与Hugging Face Hub的配置共享
+    - 版本控制：支持配置版本管理和兼容性检查
+    - 类型安全：提供配置参数的类型验证
 
-    </Tip>
+    ⚠️ 重要说明：
+    配置文件可以加载和保存到磁盘，但加载配置文件并用其初始化模型**不会**加载模型权重。
+    配置只影响模型的结构和参数，不包括训练好的权重。
 
-    Class attributes (overridden by derived classes):
+    📋 类属性（子类可重写）：
 
-    - **model_type** (`str`) -- An identifier for the model type, serialized into the JSON file, and used to recreate
-      the correct object in [`~transformers.AutoConfig`].
-    - **has_no_defaults_at_init** (`bool`) -- Whether the config class can be initialized without providing input arguments.
-      Some configurations requires inputs to be defined at init and have no default values, usually these are composite configs,
-      (but not necessarily) such as [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`]. They have to be initialized from
-      two or more configs of type [`~transformers.PreTrainedConfig`].
-    - **keys_to_ignore_at_inference** (`list[str]`) -- A list of keys to ignore by default when looking at dictionary
-      outputs of the model during inference.
-    - **attribute_map** (`dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
-      naming of attributes.
-    - **base_model_tp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
-      parallel plan applied to the sub-module when `model.tensor_parallel` is called.
-    - **base_model_pp_plan** (`dict[str, tuple[list[str]]]`) -- A dict that maps child-modules of a base model to a
-      pipeline parallel plan that enables users to place the child-module on the appropriate device.
+    - **model_type** (str): 模型类型标识符，序列化到JSON文件中，用于AutoConfig重建正确的对象
+    - **has_no_defaults_at_init** (bool): 配置类是否可以在不提供输入参数的情况下初始化
+    - **keys_to_ignore_at_inference** (list[str]): 推理时忽略的输出键列表
+    - **attribute_map** (dict[str, str]): 模型特定属性名到标准属性名的映射
+    - **base_model_tp_plan** (dict[str, Any]): 基础模型子模块的tensor parallel计划映射
+    - **base_model_pp_plan** (dict[str, tuple[list[str]]]): 基础模型的pipeline parallel计划映射
 
-    Common attributes (present in all subclasses):
+    🎯 通用属性（所有子类都具备）：
+    - name_or_path: 模型名称或路径
+    - output_hidden_states: 是否输出隐藏状态
+    - output_attentions: 是否输出注意力权重
+    - torchscript: 是否支持TorchScript导出
+    - torch_dtype: PyTorch数据类型
+    - use_bfloat16: 是否使用bfloat16精度
+    - tf32: 是否使用TF32精度（A100+）
+
+    📖 使用示例：
+        ```python
+        # 从Hub加载配置
+        config = AutoConfig.from_pretrained("bert-base-uncased")
+
+        # 创建自定义配置
+        config = BertConfig(
+            vocab_size=30522,
+            hidden_size=768,
+            num_hidden_layers=12
+        )
+
+        # 保存配置
+        config.save_pretrained("./my_config")
+
+        # 推理时忽略特定键
+        config.keys_to_ignore_at_inference = ["past_key_values"]
+        ```
+
+    🔧 继承指导：
+        1. 子类必须定义model_type属性
+        2. 在__init__中设置模型特定的参数
+        3. 使用attribute_map处理属性名不一致问题
+        4. 考虑重写validate方法进行配置验证
+        5. 为复杂的配置参数提供合理的默认值
+
+    ⚡ 性能优化：
+    - 设置use_cache为True启用KV缓存（生成模型）
+    - 配置适当的torch_dtype减少内存使用
+    - 使用quantization_config进行量化配置
+    - 通过device_map指定设备分配策略
+    """
 
     - **vocab_size** (`int`) -- The number of tokens in the vocabulary, which is also the first dimension of the
       embeddings matrix (this attribute may be missing for models that don't have a text modality like ViT).

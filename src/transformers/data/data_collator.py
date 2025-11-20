@@ -12,6 +12,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Transformers数据收集器模块
+
+该模块实现了各种NLP任务的数据收集器(DataCollator)，负责将原始数据样本转换为模型可处理的批次格式。
+数据收集器是训练和推理过程中的关键组件，确保数据能够以正确的格式传递给模型。
+
+核心功能：
+- 批次数据处理：将多个样本组合成批次
+- 动态填充：根据实际需要动态填充序列
+- 任务特定处理：针对不同NLP任务的专门数据处理
+- 框架兼容：支持PyTorch和NumPy格式转换
+- 内存优化：高效的内存使用策略
+
+主要组件：
+- DefaultDataCollator: 默认数据收集器
+- DataCollatorWithPadding: 带填充功能的数据收集器
+- DataCollatorForLanguageModeling: 语言建模数据收集器
+- DataCollatorForTokenClassification: 标记分类数据收集器
+- DataCollatorForSeq2Seq: 序列到序列数据收集器
+
+使用场景：
+- 训练时的批次数据准备
+- 推理时的输入格式化
+- 动态填充优化内存使用
+- 多任务学习的数据处理
+
+设计原则：
+- 灵活性：支持多种NLP任务和数据处理策略
+- 效率性：优化内存使用和处理速度
+- 兼容性：与不同深度学习框架的兼容
+- 易用性：提供简单的API和合理的默认配置
+"""
+
 import multiprocessing as mp
 import warnings
 from collections.abc import Callable, Mapping
@@ -25,25 +58,115 @@ from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import PaddingStrategy
 
 
+# 输入数据类型的类型别名
+# 用于表示任意的输入数据格式，可以是字典、张量或自定义数据结构
 InputDataClass = Any
 
 """
-A DataCollator is a function that takes a list of samples from a Dataset and collate them into a batch, as a dictionary
-of PyTorch tensors or NumPy arrays.
+数据收集器类型定义
+
+数据收集器是一个函数，接收来自数据集的样本列表，将它们整理成一个批次。
+输出是一个包含PyTorch张量或NumPy数组的字典。
+
+功能描述：
+1. 接收样本列表：从数据集中获取的一组输入样本
+2. 批次整理：将样本组合成模型可处理的批次格式
+3. 张量转换：将数据转换为深度学习框架的张量格式
+4. 返回字典：返回模型需要的所有输入张量
+
+输入：
+- list[InputDataClass]: 样本列表，每个样本可以是任意格式
+
+输出：
+- dict[str, Any]: 批次字典，包含模型所需的所有张量
+
+使用示例：
+    ```python
+    def custom_collator(examples):
+        # 自定义数据收集逻辑
+        return {
+            'input_ids': torch.stack([ex['input_ids'] for ex in examples]),
+            'attention_mask': torch.stack([ex['attention_mask'] for ex in examples])
+        }
+    ```
 """
 DataCollator = Callable[[list[InputDataClass]], dict[str, Any]]
 
 
 class DataCollatorMixin:
+    """
+    数据收集器混入类
+
+    为数据收集器提供框架兼容性和统一接口的基础混入类。
+    支持多种深度学习框架的张量格式转换，包括PyTorch和NumPy。
+
+    主要功能：
+    - 框架自动检测：根据return_tensors参数自动选择处理方法
+    - 统一接口：提供一致的__call__接口
+    - 格式转换：支持pt(PyTorch)和np(NumPy)格式
+    - 错误处理：对不支持的框架提供明确的错误信息
+
+    使用方法：
+        继承此混入类并实现相应的torch_call和numpy_call方法：
+
+        ```python
+        class MyDataCollator(DataCollatorMixin):
+            def torch_call(self, features):
+                # PyTorch格式的处理逻辑
+                return torch_batch
+
+            def numpy_call(self, features):
+                # NumPy格式的处理逻辑
+                return numpy_batch
+        ```
+
+    参数说明：
+        features: 输入特征列表，每个元素是一个样本的特征
+        return_tensors: 返回张量的格式，可选值：
+            - "pt": PyTorch张量格式
+            - "np": NumPy数组格式
+            - None: 使用默认格式(self.return_tensors)
+    """
+
     def __call__(self, features, return_tensors: Optional[str] = None):
+        """
+        数据收集器的主调用方法
+
+        根据指定的张量格式选择相应的处理方法，并返回处理后的批次数据。
+
+        Args:
+            features: 特征列表，包含待处理的多个样本
+            return_tensors (Optional[str]): 返回张量的格式
+                - "pt": PyTorch张量
+                - "np": NumPy数组
+                - None: 使用实例的默认格式
+
+        Returns:
+            dict[str, Any]: 处理后的批次数据，包含模型所需的所有张量
+
+        Raises:
+            ValueError: 当指定的框架格式不被支持时抛出异常
+
+        执行流程：
+        1. 确定返回张量格式
+        2. 根据格式调用相应的处理方法
+        3. 返回处理后的批次数据
+        """
+        # 如果未指定返回格式，使用实例的默认格式
         if return_tensors is None:
             return_tensors = self.return_tensors
+
+        # 根据返回格式选择相应的处理方法
         if return_tensors == "pt":
+            # PyTorch格式处理
             return self.torch_call(features)
         elif return_tensors == "np":
+            # NumPy格式处理
             return self.numpy_call(features)
         else:
-            raise ValueError(f"Framework '{return_tensors}' not recognized!")
+            # 不支持的格式，抛出错误
+            raise ValueError(f"Framework '{return_tensors}' not recognized! "
+                           f"Supported formats are: 'pt' (PyTorch), 'np' (NumPy)")
 
 
 def pad_without_fast_tokenizer_warning(tokenizer, *pad_args, **pad_kwargs):
@@ -94,26 +217,71 @@ def default_data_collator(features: list[InputDataClass], return_tensors="pt") -
 @dataclass
 class DefaultDataCollator(DataCollatorMixin):
     """
-    Very simple data collator that simply collates batches of dict-like objects and performs special handling for
-    potential keys named:
+    默认数据收集器
 
-        - `label`: handles a single value (int or float) per object
-        - `label_ids`: handles a list of values per object
+    这是一个简单的数据收集器，用于将字典样式的对象整理成批次。
+    主要处理具有以下特殊键的数据：
 
-    Does not do any additional preprocessing: property names of the input object will be used as corresponding inputs
-    to the model. See glue and ner for example of how it's useful.
+        - `label`: 处理每个对象的单个值（int或float）
+        - `label_ids`: 处理每个对象的值列表
 
-    This is an object (like other data collators) rather than a pure function like default_data_collator. This can be
-    helpful if you need to set a return_tensors value at initialization.
+    特性说明：
+    - 不会进行额外的预处理操作
+    - 输入对象的属性名将直接用作模型的对应输入
+    - 特别适用于已经预处理好的数据
+    - 提供对象接口而非纯函数接口，便于在初始化时设置return_tensors
+
+    使用场景：
+    - GLUE任务（General Language Understanding Evaluation）
+    - NER任务（Named Entity Recognition）
+    - 已经完成预处理的数据
+    - 需要简单批次整理的情况
+
+    示例使用：
+        ```python
+        collator = DefaultDataCollator(return_tensors="pt")
+
+        # 准备数据
+        features = [
+            {"input_ids": [101, 102], "label": 1},
+            {"input_ids": [101, 103], "label": 0}
+        ]
+
+        # 批次处理
+        batch = collator(features)
+        # 结果：{"input_ids": tensor([[101, 102], [101, 103]]), "label": tensor([1, 0])}
+        ```
 
     Args:
-        return_tensors (`str`, *optional*, defaults to `"pt"`):
-            The type of Tensor to return. Allowable values are "np", or "pt".
+        return_tensors (str, optional, defaults to "pt"):
+            返回的张量类型。可选值：
+            - "pt": PyTorch张量（默认）
+            - "np": NumPy数组
     """
 
-    return_tensors: str = "pt"
+    return_tensors: str = "pt"  # 默认返回PyTorch张量格式
 
     def __call__(self, features: list[dict[str, Any]], return_tensors=None) -> dict[str, Any]:
+        """
+        调用默认数据收集器处理特征列表
+
+        Args:
+            features (list[dict[str, Any]]): 特征列表，每个元素是字典格式的样本
+            return_tensors (str, optional): 返回张量的格式，如果为None则使用实例的默认值
+
+        Returns:
+            dict[str, Any]: 处理后的批次数据，包含所有输入张量
+
+        处理逻辑：
+        1. 如果未指定return_tensors，使用实例的默认值
+        2. 调用default_data_collator函数进行实际的批次处理
+        3. 返回处理后的批次字典
+
+        特殊处理：
+        - label键：转换为张量并适当堆叠
+        - label_ids键：处理多标签情况
+        - 其他键：直接堆叠成张量
+        """
         if return_tensors is None:
             return_tensors = self.return_tensors
         return default_data_collator(features, return_tensors)
@@ -190,52 +358,145 @@ def numpy_default_data_collator(features: list[InputDataClass]) -> dict[str, Any
 @dataclass
 class DataCollatorWithPadding:
     """
-    Data collator that will dynamically pad the inputs received.
+    动态填充数据收集器
+
+    这是一个能够动态填充输入序列的数据收集器，是实际应用中最常用的收集器之一。
+    根据批次中序列的实际长度进行动态填充，避免不必要的内存浪费。
+
+    🎯 主要功能：
+    - 动态填充：根据批次中实际最长序列进行填充
+    - 内存优化：避免固定长度的过度填充
+    - 多策略支持：支持多种填充策略
+    - 硬件优化：支持特定硬件的张量核心优化
+
+    📋 填充策略：
+
+    - `True` 或 `'longest'`（默认）：填充到批次中最长序列的长度
+      - 如果只有一个序列，则不进行填充
+      - 最常用的策略，内存效率最高
+
+    - `'max_length'`：填充到指定的最大长度
+      - 如果未提供max_length参数，则使用模型的最大输入长度
+      - 适用于需要固定长度输入的场景
+
+    - `False` 或 `'do_not_pad'`：不进行填充
+      - 输出批次中的序列长度可能不同
+      - 适用于支持可变长度输入的模型
+
+    🚀 硬件优化（pad_to_multiple_of）：
+    - 填充到指定值的倍数
+    - 特别适用于NVIDIA硬件的计算能力>=7.0（Volta架构）
+    - 启用Tensor Cores的核心优化，提升计算效率
+    - 常用值：8、16、32等（取决于模型架构）
+
+    💡 使用示例：
+        ```python
+        # 基础使用：动态填充到最长序列
+        collator = DataCollatorWithPadding(tokenizer)
+
+        # 固定长度填充
+        collator = DataCollatorWithPadding(
+            tokenizer,
+            padding="max_length",
+            max_length=128
+        )
+
+        # 硬件优化填充
+        collator = DataCollatorWithPadding(
+            tokenizer,
+            pad_to_multiple_of=8  # 填充到8的倍数
+        )
+        ```
 
     Args:
-        tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
-            The tokenizer used for encoding the data.
-        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
-            Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
-            among:
+        tokenizer (PreTrainedTokenizer or PreTrainedTokenizerFast):
+            用于编码数据的分词器，必须是预训练的分词器实例
 
-            - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a single
-              sequence is provided).
-            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-              acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different lengths).
-        max_length (`int`, *optional*):
-            Maximum length of the returned list and optionally padding length (see above).
-        pad_to_multiple_of (`int`, *optional*):
-            If set will pad the sequence to a multiple of the provided value.
+        padding (bool, str or PaddingStrategy, optional, defaults to True):
+            填充策略，控制返回序列的填充方式：
+            - True/longest: 填充到批次最长序列
+            - max_length: 填充到指定最大长度
+            - False/do_not_pad: 不填充
 
-            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
-            7.0 (Volta).
-        return_tensors (`str`, *optional*, defaults to `"pt"`):
-            The type of Tensor to return. Allowable values are "np", or "pt".
+        max_length (int, optional):
+            返回列表的最大长度，可选的填充长度
+            仅在padding="max_length"时生效
+
+        pad_to_multiple_of (int, optional):
+            如果设置，将序列填充到指定值的倍数
+            用于NVIDIA Tensor Core优化（计算能力>=7.0）
+
+        return_tensors (str, optional, defaults to "pt"):
+            返回的张量类型
+            - "pt": PyTorch张量（默认）
+            - "np": NumPy数组
+
+    🎨 性能优化建议：
+    1. 优先使用动态填充（padding="longest"）节省内存
+    2. 在GPU训练时使用pad_to_multiple_of=8
+    3. 批量推理时可考虑固定长度填充
+    4. 大模型训练时优先使用fast tokenizer
     """
 
-    tokenizer: PreTrainedTokenizerBase
-    padding: Union[bool, str, PaddingStrategy] = True
-    max_length: Optional[int] = None
-    pad_to_multiple_of: Optional[int] = None
-    return_tensors: str = "pt"
+    # 核心属性定义
+    tokenizer: PreTrainedTokenizerBase              # 分词器实例，用于文本编码和填充
+    padding: Union[bool, str, PaddingStrategy] = True  # 填充策略，默认为动态填充
+    max_length: Optional[int] = None               # 最大序列长度，用于固定长度填充
+    pad_to_multiple_of: Optional[int] = None       # 填充倍数，用于硬件优化
+    return_tensors: str = "pt"                     # 返回张量格式，默认PyTorch
 
     def __call__(self, features: list[dict[str, Any]]) -> dict[str, Any]:
+        """
+        执行动态填充数据收集
+
+        将输入的特征列表转换为填充后的批次张量，处理不同长度的序列。
+
+        Args:
+            features (list[dict[str, Any]]): 特征列表，每个元素包含待处理的样本数据
+                典型的特征包括：
+                - input_ids: 输入ID序列
+                - attention_mask: 注意力掩码
+                - token_type_ids: 段落ID（可选）
+                - labels: 标签数据（可选）
+
+        Returns:
+            dict[str, Any]: 填充后的批次数据，包含：
+            - input_ids: 填充后的输入ID张量
+            - attention_mask: 填充后的注意力掩码张量
+            - 其他字段：根据输入特征动态添加
+
+        处理流程：
+        1. 调用分词器的pad方法进行填充
+        2. 应用指定的填充策略
+        3. 处理硬件优化参数
+        4. 转换为指定的张量格式
+        5. 返回批次字典
+
+        性能考虑：
+        - 使用fast tokenizer提升填充速度
+        - 合理设置pad_to_multiple_of优化GPU利用率
+        - 避免不必要的固定长度填充
+        """
         batch = pad_without_fast_tokenizer_warning(
-            self.tokenizer,
-            features,
-            padding=self.padding,
-            max_length=self.max_length,
-            pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors=self.return_tensors,
+            self.tokenizer,                    # 分词器实例
+            features,                         # 特征列表
+            padding=self.padding,             # 填充策略
+            max_length=self.max_length,       # 最大长度
+            pad_to_multiple_of=self.pad_to_multiple_of,  # 填充倍数
+            return_tensors=self.return_tensors,  # 张量格式
         )
+
+        # 处理标签字段的标准化
+        # 将不同格式的标签字段统一为"labels"字段，符合大多数模型的期望格式
         if "label" in batch:
+            # 处理单个标签值的场景（如分类任务）
             batch["labels"] = batch["label"]
-            del batch["label"]
+            del batch["label"]  # 删除原始字段，避免重复
         if "label_ids" in batch:
+            # 处理标签序列的场景（如标记分类任务）
             batch["labels"] = batch["label_ids"]
-            del batch["label_ids"]
+            del batch["label_ids"]  # 删除原始字段，避免重复
+
         return batch
 
 

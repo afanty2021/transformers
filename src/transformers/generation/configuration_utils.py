@@ -12,7 +12,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Generation configuration class and utilities."""
+"""
+Transformers生成配置模块
+
+该模块提供了文本生成配置管理的核心功能，包括GenerationConfig类和相关工具函数。
+负责管理生成过程中的所有参数和配置，确保生成行为的标准化和可复现性。
+
+核心功能：
+- 生成配置类：统一的生成参数管理
+- 配置序列化：支持JSON格式的保存和加载
+- Hub集成：与Hugging Face Hub的配置共享
+- 参数验证：确保配置参数的有效性
+- 版本兼容：支持配置的向前兼容性
+
+主要组件：
+- GenerationConfig: 生成配置主类
+- 特殊配置：水印、编译等特定配置
+- 工具函数：配置相关的辅助工具
+
+使用场景：
+- 文本生成参数的标准化管理
+- 生成配置的保存和重用
+- 不同生成策略的参数配置
+- 生产环境的生成配置管理
+
+设计原则：
+- 标准化：统一的参数命名和语义
+- 可扩展：支持新参数和功能的添加
+- 向后兼容：保持API的稳定性
+- 类型安全：提供参数类型检查
+"""
 
 import copy
 import json

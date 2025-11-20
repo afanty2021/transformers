@@ -12,7 +12,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Integration with Deepspeed
+Transformers与DeepSpeed集成模块
+
+该模块提供Microsoft DeepSpeed与Transformers框架的深度集成，实现大规模模型训练的内存和性能优化。
+DeepSpeed是Microsoft开发的大规模模型训练优化框架，特别擅长处理超大模型和分布式训练。
+
+核心功能：
+- ZeRO优化：零冗余优化器状态分片（ZeRO-1/2/3）
+- 内存优化：梯度检查点、激活检查点、CPU卸载
+- 混合精度：FP16/BF16训练支持
+- 分布式训练：多节点、多GPU训练优化
+- 大模型支持：处理千亿参数级别模型
+
+主要组件：
+- DeepSpeedEngineWrapper：DeepSpeed引擎包装器
+- HfDeepSpeedConfig：HuggingFace-DeepSpeed配置桥接
+- 可用性检查：DeepSpeed库的安装和版本检查
+
+使用场景：
+- 超大模型训练（百亿+参数）
+- 多GPU分布式训练
+- 内存受限环境下的模型训练
+- 高效的大规模微调
+
+性能优势：
+- 内存效率：通过ZeRO显著减少GPU内存使用
+- 训练速度：优化的通信和计算策略
+- 可扩展性：支持数百张GPU的训练
+- 易用性：与Transformers无缝集成
+
+注意事项：
+- 需要安装DeepSpeed库：pip install deepspeed
+- 建议使用NVIDIA GPU（CUDA支持）
+- 支持混合精度训练需要兼容的硬件
+- ZeRO-3需要多GPU环境
 """
 
 import copy
@@ -34,10 +67,37 @@ logger = logging.get_logger(__name__)
 
 
 def is_deepspeed_available():
+    """
+    检查DeepSpeed库是否可用
+
+    该函数用于检查DeepSpeed库是否已正确安装并且可以正常导入。
+    通过多种验证机制确保检测到的是真正的DeepSpeed库而不是同名目录。
+
+    检查步骤：
+    1. 检查deepspeed包是否可以找到
+    2. 验证包的元数据信息
+    3. 检查版本信息的有效性
+    4. 确认作者是Microsoft而非其他组织
+
+    Returns:
+        bool: 如果DeepSpeed库可用返回True，否则返回False
+
+    验证逻辑：
+    - 查找deepspeed模块的规范
+    - 检查版本元数据
+    - 验证作者信息（应为Microsoft）
+    - 确保不是虚假的同名包
+
+    使用场景：
+    - 在集成DeepSpeed功能前的预检查
+    - 条件导入DeepSpeed相关代码
+    - 提供用户友好的错误提示
+    """
+    # 首先检查是否存在deepspeed模块
     package_exists = importlib.util.find_spec("deepspeed") is not None
 
-    # Check we're not importing a "deepspeed" directory somewhere but the actual library by trying to grab the version
-    # AND checking it has an author field in the metadata that is HuggingFace.
+    # 验证我们导入的是真正的DeepSpeed库而不是某个"deepspeed"目录
+    # 通过尝试获取版本信息并检查元数据中的author字段是否为Microsoft
     if package_exists:
         try:
             _ = importlib_metadata.metadata("deepspeed")

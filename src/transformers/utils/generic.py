@@ -12,7 +12,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Generic utilities
+Transformers通用工具模块
+
+该模块提供了Transformers框架的核心通用工具类和函数，是整个框架的基础设施。
+包含了模型输出、类型定义、上下文管理器、数据处理等核心功能。
+
+主要功能：
+- 模型输出基类定义 (ModelOutput)
+- 张量类型和处理工具
+- 上下文管理器和装饰器
+- 通用数据结构和算法
+- 调试和性能监控工具
+
+核心类：
+- ModelOutput: 模型输出基类，支持字典式访问和属性访问
+- TensorType: 张量类型枚举，支持多种深度学习框架
+- PaddingStrategy: 填充策略枚举
+- ExplicitEnum: 显式枚举基类
+
+使用场景：
+- 模型输出标准化
+- 跨框架兼容性
+- 数据预处理
+- 调试和性能分析
+- 通用算法实现
+
+设计原则：
+- 类型安全
+- 跨框架兼容
+- 高效实现
+- 易于扩展
 """
 
 import inspect
@@ -34,16 +63,22 @@ from ..utils import logging
 from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires
 
 
+# 全局注册表，用于跟踪支持可记录功能的函数
+# 用于装饰器@can_record_func的功能注册和管理
 _CAN_RECORD_REGISTRY = {}
 
-
+# 获取当前模块的日志记录器
 logger = logging.get_logger(__name__)
 
+# PyTorch可用性标志和延迟导入
+# 采用延迟导入策略，避免在没有PyTorch的环境中出错
 _is_torch_available = False
 if is_torch_available():
-    # required for @can_return_tuple decorator to work with torchdynamo
+    # 必须导入torch才能使@can_return_tuple装饰器与torchdynamo正常工作
+    # torchdynamo是PyTorch 2.0的编译优化器，需要特定的导入顺序
     import torch
 
+    # 导入模型调试工具，用于模型调试和性能分析
     from ..model_debugging_utils import model_addition_debugger_context
 
     _is_torch_available = True
@@ -223,23 +258,73 @@ def to_numpy(obj):
 
 class ModelOutput(OrderedDict):
     """
-    Base class for all model outputs as dataclass. Has a `__getitem__` that allows indexing by integer or slice (like a
-    tuple) or strings (like a dictionary) that will ignore the `None` attributes. Otherwise behaves like a regular
-    python dictionary.
+    模型输出基类
 
-    <Tip warning={true}>
+    这是所有Transformers模型输出的基类，继承自OrderedDict。
+    提供了灵活的数据访问方式，支持字典式访问、属性访问和元组式访问。
 
-    You can't unpack a `ModelOutput` directly. Use the [`~utils.ModelOutput.to_tuple`] method to convert it to a tuple
-    before.
+    主要特性：
+    - 多种访问方式：obj.key、obj['key']、obj[0]
+    - 自动过滤None值：在切片和索引时忽略None属性
+    - PyTorch兼容：自动注册为PyTorch PyTree节点
+    - 序列化支持：支持JSON序列化和反序列化
+    - 类型安全：支持类型提示和IDE自动完成
 
-    </Tip>
+    访问方式：
+        ```python
+        output = MyModelOutput(
+            logits=torch.tensor([[0.1, 0.9]]),
+            hidden_states=None,
+            attentions=torch.tensor([[[0.5]]])
+        )
+
+        # 属性访问
+        logits = output.logits
+
+        # 字典访问
+        logits = output['logits']
+
+        # 索引访问（自动忽略None）
+        logits = output[0]  # 第一个非None值
+        attentions = output[1]  # 第二个非None值
+
+        # 切片访问
+        first_two = output[:2]
+        ```
+
+    ⚠️ 重要提示：
+    不能直接解包ModelOutput对象。需要先使用to_tuple()方法转换为元组：
+        ```python
+        # 错误：不能直接解包
+        # logits, hidden_states = output  # 会出错
+
+        # 正确：先转换为元组再解包
+        logits, hidden_states = output.to_tuple()
+        ```
+
+    继承使用：
+        ```python
+        @dataclass
+        class BertModelOutput(ModelOutput):
+            last_hidden_state: torch.FloatTensor = None
+            pooler_output: torch.FloatTensor = None
+            hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+            attentions: Optional[Tuple[torch.FloatTensor]] = None
+        ```
     """
 
     def __init_subclass__(cls) -> None:
-        """Register subclasses as pytree nodes.
+        """
+        子类初始化方法，自动注册为PyTorch PyTree节点
 
-        This is necessary to synchronize gradients when using `torch.nn.parallel.DistributedDataParallel` with
-        `static_graph=True` with modules that output `ModelOutput` subclasses.
+        这个方法在创建ModelOutput的子类时自动调用。
+        注册为PyTree节点对于分布式训练中的梯度同步非常重要，特别是在使用
+        torch.nn.parallel.DistributedDataParallel配合static_graph=True时。
+
+        PyTree注册使得：
+        - 梯度能够正确地在分布式环境中同步
+        - 支持JAX风格的函数式编程
+        - 兼容PyTorch的自动微分系统
         """
         if _is_torch_available:
             from torch.utils._pytree import register_pytree_node
@@ -388,11 +473,40 @@ if _is_torch_available:
 
 class ExplicitEnum(str, Enum):
     """
-    Enum with more explicit error message for missing values.
+    显式枚举基类
+
+    继承自str和Enum的枚举类，为缺失的枚举值提供更明确的错误信息。
+    当用户尝试使用未定义的枚举值时，会显示所有可用的选项。
+
+    主要特性：
+    - 继承str，支持字符串操作
+    - 提供详细的错误信息，包含所有有效选项
+    - 自动完成支持，在IDE中提供选项提示
+
+    使用场景：
+    - API参数类型检查
+    - 配置选项枚举
+    - 状态定义
+
+    错误示例：
+        ValueError: 'invalid_value' is not a valid PaddingStrategy,
+                   please select one of ['longest', 'max_length', 'do_not_pad']
     """
 
     @classmethod
     def _missing_(cls, value):
+        """
+        处理缺失枚举值的方法
+
+        当用户尝试访问不存在的枚举值时，Python会调用此方法。
+        重写此方法以提供更友好的错误信息，包含所有可用的选项。
+
+        Args:
+            value: 用户尝试访问的无效枚举值
+
+        Raises:
+            ValueError: 包含所有有效选项的详细错误信息
+        """
         raise ValueError(
             f"{value} is not a valid {cls.__name__}, please select one of {list(cls._value2member_map_.keys())}"
         )
@@ -400,24 +514,72 @@ class ExplicitEnum(str, Enum):
 
 class PaddingStrategy(ExplicitEnum):
     """
-    Possible values for the `padding` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for tab-completion in an
-    IDE.
+    填充策略枚举类
+
+    定义了文本填充的三种基本策略，用于分词器的padding参数。
+    这些策略控制如何将不同长度的序列填充到相同长度。
+
+    策略说明：
+    - LONGEST: 填充到批次中最长序列的长度
+    - MAX_LENGTH: 填充到指定的最大长度
+    - DO_NOT_PAD: 不进行填充
+
+    使用场景：
+    - 批处理时的序列长度统一
+    - 动态批处理优化
+    - 内存使用优化
+
+    使用示例：
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+
+        # 填充到批次中最长序列
+        outputs = tokenizer(texts, padding="longest")
+
+        # 填充到固定长度
+        outputs = tokenizer(texts, padding="max_length", max_length=128)
+
+        # 不填充
+        outputs = tokenizer(texts, padding="do_not_pad")
     """
 
-    LONGEST = "longest"
-    MAX_LENGTH = "max_length"
-    DO_NOT_PAD = "do_not_pad"
+    LONGEST = "longest"      # 填充到批次中最长序列的长度
+    MAX_LENGTH = "max_length"  # 填充到指定的最大长度
+    DO_NOT_PAD = "do_not_pad" # 不进行填充
 
 
 class TensorType(ExplicitEnum):
     """
-    Possible values for the `return_tensors` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for
-    tab-completion in an IDE.
+    张量类型枚举类
+
+    定义了返回张量的不同框架类型，用于分词器的return_tensors参数。
+    支持多种深度学习框架的张量格式。
+
+    支持框架：
+    - PYTORCH: PyTorch框架张量
+    - NUMPY: NumPy数组格式
+    - MLX: Apple MLX框架张量（用于Apple Silicon）
+
+    使用场景：
+    - 跨框架兼容性
+    - 不同计算后端支持
+    - 数据格式转换
+
+    使用示例：
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+
+        # 返回PyTorch张量
+        outputs = tokenizer(texts, return_tensors="pt")
+
+        # 返回NumPy数组
+        outputs = tokenizer(texts, return_tensors="np")
+
+        # 返回MLX张量（在Apple Silicon上）
+        outputs = tokenizer(texts, return_tensors="mlx")
     """
 
-    PYTORCH = "pt"
-    NUMPY = "np"
-    MLX = "mlx"
+    PYTORCH = "pt"    # PyTorch张量格式
+    NUMPY = "np"      # NumPy数组格式
+    MLX = "mlx"       # Apple MLX张量格式
 
 
 class ContextManagers:

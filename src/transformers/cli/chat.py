@@ -11,6 +11,58 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+"""
+Transformers交互式聊天CLI工具
+
+该模块提供Transformers模型的交互式聊天命令行工具，支持与各种语言模型进行实时对话。
+基于typer框架构建，提供友好的命令行界面和丰富的配置选项。
+
+核心功能：
+- 交互式对话：支持与语言模型的实时对话
+- 流式输出：实时显示生成内容，提升用户体验
+- 多轮对话：维护对话历史和上下文信息
+- 配置灵活：支持多种生成参数和提示模板
+- 兼容性强：支持不同类型的Transformers模型
+
+主要组件：
+- ChatInterface：聊天界面主类
+- ConversationManager：对话管理器
+- StreamHandler：流式输出处理器
+- ConfigManager：配置管理器
+
+支持功能：
+- 文本生成：GPT、BERT等语言模型
+- 对话模式：单轮和多轮对话支持
+- 流式推理：实时输出生成内容
+- 历史记录：对话历史的保存和加载
+- 提示工程：系统提示和用户提示
+
+配置选项：
+- 模型设置：模型路径、设备选择、精度配置
+- 生成参数：温度、Top-K、Top-P、最大长度等
+- 界面设置：颜色主题、提示符、输出格式
+- 对话设置：历史长度、上下文窗口
+
+使用场景：
+- 模型测试和调试
+- 交互式文本生成
+- 对话系统原型开发
+- 提示工程实验
+- 模型性能评估
+
+界面特性：
+- 彩色输出：支持ANSI颜色代码
+- 命令历史：使用readline提供历史记录
+- 快捷键：支持常用操作的快捷键
+- 帮助系统：内置帮助和示例
+
+输出格式：
+- 实时显示：流式输出实时显示生成内容
+- 格式化：支持Markdown和代码高亮
+- 统计信息：显示生成时间和token数量
+- 错误处理：友好的错误信息显示
+"""
 import asyncio
 import json
 import os
