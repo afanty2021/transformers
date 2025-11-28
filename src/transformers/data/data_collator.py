@@ -50,7 +50,7 @@ import warnings
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from random import randint
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -531,9 +531,9 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
     """
 
     tokenizer: PreTrainedTokenizerBase
-    padding: Union[bool, str, PaddingStrategy] = True
-    max_length: Optional[int] = None
-    pad_to_multiple_of: Optional[int] = None
+    padding: bool | str | PaddingStrategy = True
+    max_length: int | None = None
+    pad_to_multiple_of: int | None = None
     label_pad_token_id: int = -100
     return_tensors: str = "pt"
 
@@ -608,7 +608,7 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
         return batch
 
 
-def _torch_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
+def _torch_collate_batch(examples, tokenizer, pad_to_multiple_of: int | None = None):
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
     import torch
 
@@ -645,7 +645,7 @@ def _torch_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] 
     return result
 
 
-def _numpy_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
+def _numpy_collate_batch(examples, tokenizer, pad_to_multiple_of: int | None = None):
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
     # Tensorize if necessary.
     if isinstance(examples[0], (list, tuple)):
@@ -708,9 +708,9 @@ class DataCollatorForMultipleChoice(DataCollatorMixin):
     """
 
     tokenizer: PreTrainedTokenizerBase
-    padding: Union[bool, str, PaddingStrategy] = True
-    max_length: Optional[int] = None
-    pad_to_multiple_of: Optional[int] = None
+    padding: bool | str | PaddingStrategy = True
+    max_length: int | None = None
+    pad_to_multiple_of: int | None = None
     return_tensors: str = "pt"
 
     def torch_call(self, examples: list[dict[str, Any]]):  # Refactored implementation from the docs.
@@ -780,10 +780,10 @@ class DataCollatorForSeq2Seq:
     """
 
     tokenizer: PreTrainedTokenizerBase
-    model: Optional[Any] = None
-    padding: Union[bool, str, PaddingStrategy] = True
-    max_length: Optional[int] = None
-    pad_to_multiple_of: Optional[int] = None
+    model: Any | None = None
+    padding: bool | str | PaddingStrategy = True
+    max_length: int | None = None
+    pad_to_multiple_of: int | None = None
     label_pad_token_id: int = -100
     return_tensors: str = "pt"
 
@@ -943,12 +943,12 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     tokenizer: PreTrainedTokenizerBase
     mlm: bool = True
     whole_word_mask: bool = False
-    mlm_probability: Optional[float] = 0.15
+    mlm_probability: float | None = 0.15
     mask_replace_prob: float = 0.8
     random_replace_prob: float = 0.1
-    pad_to_multiple_of: Optional[int] = None
+    pad_to_multiple_of: int | None = None
     return_tensors: str = "pt"
-    seed: Optional[int] = None
+    seed: int | None = None
 
     def __post_init__(self):
         if self.mlm:
@@ -984,7 +984,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
             if self.mask_replace_prob < 1:
                 warnings.warn(
-                    "Random token replacement is not supported with whole word masking.",
+                    "Random token replacement is not supported with whole word masking. "
                     "Setting mask_replace_prob to 1.",
                 )
                 self.mask_replace_prob = 1
@@ -1023,7 +1023,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
             self.generator = self.get_generator(self.seed + worker_info.id)
 
-    def torch_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
+    def torch_call(self, examples: list[list[int] | Any | dict[str, Any]]) -> dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
 
         if self.seed and self.generator is None:
@@ -1055,7 +1055,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         return batch
 
     def torch_mask_tokens(
-        self, inputs: Any, special_tokens_mask: Optional[Any] = None, offset_mapping: Optional[Any] = None
+        self, inputs: Any, special_tokens_mask: Any | None = None, offset_mapping: Any | None = None
     ) -> tuple[Any, Any]:
         """
         Prepare masked tokens inputs/labels for masked language modeling.
@@ -1117,7 +1117,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         # The rest of the time ((1-random_replace_prob-mask_replace_prob)% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
-    def numpy_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
+    def numpy_call(self, examples: list[list[int] | Any | dict[str, Any]]) -> dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
 
         if self.seed and self.generator is None:
@@ -1151,8 +1151,8 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def numpy_mask_tokens(
         self,
         inputs: Any,
-        special_tokens_mask: Optional[Any] = None,
-        offset_mapping: Optional[Any] = None,
+        special_tokens_mask: Any | None = None,
+        offset_mapping: Any | None = None,
     ) -> tuple[Any, Any]:
         """
         Prepare masked tokens inputs/labels for masked language modeling.
@@ -1410,14 +1410,14 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
     max_span_length: int = 5  # maximum length of a span of masked tokens
     return_tensors: str = "pt"
 
-    def torch_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
+    def torch_call(self, examples: list[list[int] | Any | dict[str, Any]]) -> dict[str, Any]:
         if isinstance(examples[0], Mapping):
             examples = [e["input_ids"] for e in examples]
         batch = _torch_collate_batch(examples, self.tokenizer)
         inputs, perm_mask, target_mapping, labels = self.torch_mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
 
-    def numpy_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
+    def numpy_call(self, examples: list[list[int] | Any | dict[str, Any]]) -> dict[str, Any]:
         if isinstance(examples[0], Mapping):
             examples = [e["input_ids"] for e in examples]
         batch = _numpy_collate_batch(examples, self.tokenizer)
