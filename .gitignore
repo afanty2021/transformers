@@ -178,3 +178,6 @@ tags
 
 # Spec workflow files
 .spec-workflow/
+
+# Test results
+test-results/
