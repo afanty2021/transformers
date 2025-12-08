@@ -2176,7 +2176,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         possible_module_names = ["language_model", "text_model", "decoder"]
         for name in possible_module_names:
             if hasattr(self, name):
-                print(name)
                 setattr(self, name, decoder)
                 return
 
@@ -4162,10 +4161,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Prepare parameters offloading if needed
         if device_map is not None and "disk" in device_map.values():
             disk_offload_index = accelerate_disk_offload(
+                model,
                 disk_offload_folder,
                 checkpoint_files,
                 device_map,
-                expected_keys,
                 sharded_metadata,
                 dtype,
                 weight_mapping,
@@ -4252,7 +4251,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tp_device = list(device_map.values())[0]
             # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
             # not part of the state_dict (persistent=False)
-            for buffer in model.buffers():  # TODO to avaoid this buffer could be added to the ckpt
+            for buffer in model.buffers():  # TODO to avoid this buffer could be added to the ckpt
                 if buffer.device != tp_device:
                     buffer.data = buffer.to(tp_device)
 
