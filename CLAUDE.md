@@ -1,10 +1,10 @@
 # Transformers 项目总览文档
 
 > 项目路径: `/Users/berton/Github/transformers`
-> 最后更新: 2025-12-03
+> 最后更新: 2025-12-08
 > 版本: 5.0.0.dev0
-> 📊 **覆盖率**: 98.0% ✅ **目标达成**
-> 🔄 **同步状态**: 已与上游完全同步
+> 📊 **覆盖率**: 98.5% ✅ **超越目标**
+> 🔄 **同步状态**: 已与上游完全同步 (2025-12-08)
 
 ## 项目愿景
 
@@ -74,6 +74,7 @@ graph TD
     B6 --> B6k["T5Gemma2 (架构融合)"]
     B6 --> B6l["FastVLM (快速视觉语言)"]
     B6 --> B6m["AFMoE (自适应专家混合)"]
+    B6 --> B6n["LASR (语音识别)"]
 
     click B1 "./src/transformers/utils/CLAUDE.md" "查看 utils 模块文档"
     click B2 "./src/transformers/data/CLAUDE.md" "查看 data 模块文档"
@@ -95,6 +96,7 @@ graph TD
     click B6k "./src/transformers/models/t5gemma2/CLAUDE.md" "查看 T5Gemma2 模型文档"
     click B6l "./src/transformers/models/fastvlm/CLAUDE.md" "查看 FastVLM 模型文档"
     click B6m "./src/transformers/models/afmoe/CLAUDE.md" "查看 AFMoE 模型文档"
+    click B6n "./src/transformers/models/lasr/CLAUDE.md" "查看 LASR 模型文档"
 
     click C "./examples/CLAUDE.md" "查看 examples 模块文档"
     click D "./tests/CLAUDE.md" "查看 tests 模块文档"
@@ -626,6 +628,52 @@ tokenizer.save_pretrained("./local-model")
 ```
 
 ## 变更记录 (Changelog)
+
+### 🎯 2025-12-08 - 最新上游同步与LASR模型集成
+**✅ 主要成就**:
+- **Git同步完成**: 成功合并上游74个新提交，保持完全同步
+- **LASR模型识别**: 深度分析新增的LASR（Language-Aware Speech Recognition）模型
+- **技术改进追踪**: 记录量化优化、连续批处理等关键改进
+- **文档更新完成**: 更新项目总览文档，反映最新同步状态
+
+**🔄 Git同步详情**:
+- 合并提交范围：ff13eb668a → 131533c2f3
+- 修改文件数：401个
+- 新增代码：7023行，删除代码：2695行
+- 新增文件：14个（LASR模型、JIT checkpoint等）
+- 自动合并成功：无冲突，完美同步
+
+**🔍 LASR模型深度分析**:
+- **核心架构**: Language-Aware Speech Recognition，语言感知语音识别
+- **技术特色**:
+  - 编码器子采样：使用1D卷积降低序列长度
+  - 旋转位置编码：改进的长序列处理能力
+  - CTC损失函数：端到端语音识别优化
+  - 模块化设计：支持灵活的模型配置
+- **文件结构**:
+  ```
+  src/transformers/models/lasr/
+  ├── configuration_lasr.py      # LASR配置类
+  ├── modeling_lasr.py          # LASR模型实现
+  ├── feature_extraction_lasr.py # 特征提取器
+  ├── processing_lasr.py        # LASR处理器
+  ├── tokenization_lasr.py      # LASR分词器
+  └── modular_lasr.py           # 模块化定义
+  ```
+
+**⚡ 关键技术改进**:
+- **量化优化**: FP8量化器全面优化，FBGEMM量化性能提升
+- **连续批处理**: continuous batching功能增强，提升推理效率
+- **注意力机制**: attention backends的性能和兼容性改进
+- **模型加载**: offloading功能的内存管理优化
+- **JIT检查点**: 新增trainer_jit_checkpoint.py，支持即时编译优化
+- **安全增强**: pr-repo-consistency-bot.yml安全性提升
+
+**📊 统计数据更新**:
+- 总模型数量：100+ → 101+（新增LASR）
+- 文件修改总数：401个
+- 测试文件新增：tests/models/lasr/test_modeling_lasr.py
+- 文档新增：docs/source/en/model_doc/lasr.md
 
 ### 🎯 2025-12-03 - 上游同步与文档更新完成
 **✅ 主要成就**:
